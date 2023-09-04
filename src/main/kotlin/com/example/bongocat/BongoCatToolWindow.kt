@@ -71,7 +71,7 @@ class BongoCatToolWindow : ToolWindowFactory {
                 val currentTime = System.currentTimeMillis()
                 keyPressTimes.addLast(currentTime)
 
-                // ms 이내의 키 입력만 유지
+                // 100ms 이내의 키 입력만 유지
                 keyPressTimes.removeIf { it < currentTime - 100}
 
                 // 빠른 키 입력 감지
