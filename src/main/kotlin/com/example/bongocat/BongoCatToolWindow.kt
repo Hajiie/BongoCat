@@ -58,6 +58,7 @@ class BongoCatToolWindow : ToolWindowFactory {
         val idleTimer = Timer(500) {
             label.icon = bongoMiddle
         }
+
         idleTimer.isRepeats = false
 
         // 키 입력 시간을 저장하는 큐
