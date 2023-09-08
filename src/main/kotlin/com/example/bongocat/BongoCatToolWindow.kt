@@ -1,9 +1,10 @@
 package com.example.bongocat
 
 import com.intellij.openapi.components.ServiceManager
-import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.ex.FileEditorWithProvider
@@ -24,7 +25,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
     private val bongoLeft = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_left.png")))
     private val bongoRight = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_right.png")))
     private val bongoMiddle =
-        ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_middle.png")))
+            ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_middle.png")))
 
     // 키 입력 시간을 저장하는 큐
     private val keyPressTimes: LinkedList<Long> = LinkedList()
@@ -33,10 +34,10 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
     private val idleTimer: Timer
     private val label: JLabel = JLabel()
 
-    // 등록된 DocumentListener를 저장하는 리스트
-    private val documentListeners : MutableList<DocumentListener> = mutableListOf()
+    // DocumentListener를 저장하는 맵
+    private val documentListenersMap: MutableMap<Document, DocumentListener> = mutableMapOf()
 
-    // 생성자
+    // 생성
     init {
         label.icon = bongoMiddle
 
@@ -49,26 +50,37 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
 
     }
 
-    // DocumentListener를 구현
-    private val documentListener = object : DocumentListener {
-        override fun documentChanged(event: DocumentEvent) {
-            idleTimer.restart()
-
-            // 현재 시간을 큐에 추가
-            val currentTime = System.currentTimeMillis()
-            keyPressTimes.addLast(currentTime)
-
-            // 100ms 이내의 키 입력만 유지
-            keyPressTimes.removeIf { it < currentTime - 100 }
-
-            // 빠른 키 입력 감지
-            if (keyPressTimes.size >= 1) {
-                label.icon = if (label.icon === bongoLeft) bongoRight else bongoLeft
+    //registerDocumentListener 메서드
+    private fun registerDocumentListener(file: VirtualFile) {
+        val document = FileDocumentManager.getInstance().getDocument(file)
+        if (document != null) {
+            // 이미 등록된 DocumentListener인 경우 제거
+            documentListenersMap[document]?.let {
+                document.removeDocumentListener(it)
+                documentListenersMap.remove(document)
             }
+
+            // DocumentListener를 구현
+            val documentListener = object : DocumentListener {
+                override fun documentChanged(event: DocumentEvent) {
+                    idleTimer.restart()
+                    val currentTime = System.currentTimeMillis()
+                    keyPressTimes.addLast(currentTime)
+                    keyPressTimes.removeIf { it < currentTime - 100 }
+
+                    if (keyPressTimes.size >= 1) {
+                        label.icon = if (label.icon === bongoLeft) bongoRight else bongoLeft
+                    }
+                }
+            }
+
+            // 새로운 DocumentListener 등록
+            document.addDocumentListener(documentListener)
+            documentListenersMap[document] = documentListener
         }
     }
 
-    // EditorFactoryListener의 메서드를 구현
+    // ToolWindowFactory의 메서드를 구현
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = JPanel()
 
@@ -82,28 +94,28 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         panel.isFocusable = true
         panel.requestFocusInWindow()
 
-        // 모든 에디터에 DocumentListener 등록
-        val editorFactory = EditorFactory.getInstance()
-        for (editor in editorFactory.allEditors) {
-            editor.document.addDocumentListener(documentListener)
-        }
-
         // FileEditorManagerListener 등록
         project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, this)
+
+        // 현재 열려 있는 파일 에디터 목록에 대한 이벤트 리스너 등록
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        for (file in fileEditorManager.openFiles) {
+            registerDocumentListener(file)
+        }
+
+        fileEditorManager.addFileEditorManagerListener(this)
     }
 
 
 
     // FileEditorManagerListener의 메서드를 구현
     override fun fileOpenedSync(
-        source: FileEditorManager,
-        file: VirtualFile,
-        editorsWithProviders: MutableList<FileEditorWithProvider>
+            source: FileEditorManager,
+            file: VirtualFile,
+            editorsWithProviders: MutableList<FileEditorWithProvider>
     ) {
-        // create 되거나 open 되는 모든 에디터에 DocumentListener 등록 & 중복 등록 방지
-        if (!documentListeners.contains(documentListener)) {
-            documentListeners.add(documentListener)
-            source.selectedTextEditor?.document?.addDocumentListener(documentListener)
-        }
+        // 중복 등록을 방지하고 DocumentListener를 등록
+        registerDocumentListener(file)
+
     }
 }

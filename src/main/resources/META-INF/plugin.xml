@@ -23,6 +23,8 @@
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
 
+
+
         <toolWindow id="BongoCatToolWindow"
                     anchor="bottom"
                     factoryClass="com.example.bongocat.BongoCatToolWindow"/>
