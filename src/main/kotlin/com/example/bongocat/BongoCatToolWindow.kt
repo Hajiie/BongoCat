@@ -30,11 +30,12 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
     // 모든 열려있는 에디터에 DocumentListener 추가
 
     private val idleTimer: Timer
-    private val label: JLabel
+    private val label: JLabel = JLabel()
+
+    private val documentListeners : MutableList<DocumentListener> = mutableListOf()
 
     // 생성자
     init {
-        label = JLabel()
         label.icon = bongoMiddle
 
         idleTimer = Timer(500) {
@@ -92,7 +93,10 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         file: VirtualFile,
         editorsWithProviders: MutableList<FileEditorWithProvider>
     ) {
-        source.getSelectedTextEditor()?.document?.addDocumentListener(documentListener)
+        val document = source.selectedTextEditor?.document
+        if(document!=null&&!documentListeners.contains(documentListener)){
+            document.addDocumentListener(documentListener)
+        }
     }
 
 }
