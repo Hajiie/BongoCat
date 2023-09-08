@@ -44,8 +44,8 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
 
         idleTimer.isRepeats = false
 
-    }
 
+    }
 
     // DocumentListener를 구현
     private val documentListener = object : DocumentListener {
@@ -66,7 +66,6 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         }
     }
 
-
     // EditorFactoryListener의 메서드를 구현
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = JPanel()
@@ -85,18 +84,24 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         for (editor in editorFactory.allEditors) {
             editor.document.addDocumentListener(documentListener)
         }
+
+        // FileEditorManagerListener 등록
         project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, this)
     }
 
+
+
+    // FileEditorManagerListener의 메서드를 구현
     override fun fileOpenedSync(
         source: FileEditorManager,
         file: VirtualFile,
         editorsWithProviders: MutableList<FileEditorWithProvider>
     ) {
-        val document = source.selectedTextEditor?.document
-        if(document!=null&&!documentListeners.contains(documentListener)){
-            document.addDocumentListener(documentListener)
+        // val document = source.selectedTextEditor?.document
+        //val editorFactory = EditorFactory.getInstance().getEditors(document!!)
+        if (!documentListeners.contains(documentListener)) {
+            documentListeners.add(documentListener)
+            source.selectedTextEditor?.document?.addDocumentListener(documentListener)
         }
     }
-
 }
