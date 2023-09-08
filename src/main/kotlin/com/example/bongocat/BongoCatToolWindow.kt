@@ -20,6 +20,7 @@ import javax.swing.JPanel
 import javax.swing.Timer
 
 class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
+    // 이미지 아이콘
     private val bongoLeft = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_left.png")))
     private val bongoRight = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_right.png")))
     private val bongoMiddle =
@@ -27,11 +28,12 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
 
     // 키 입력 시간을 저장하는 큐
     private val keyPressTimes: LinkedList<Long> = LinkedList()
-    // 모든 열려있는 에디터에 DocumentListener 추가
 
+    // 500ms 이내의 키 입력을 감지하기 위한 타이머
     private val idleTimer: Timer
     private val label: JLabel = JLabel()
 
+    // 등록된 DocumentListener를 저장하는 리스트
     private val documentListeners : MutableList<DocumentListener> = mutableListOf()
 
     // 생성자
@@ -80,6 +82,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         panel.isFocusable = true
         panel.requestFocusInWindow()
 
+        // 모든 에디터에 DocumentListener 등록
         val editorFactory = EditorFactory.getInstance()
         for (editor in editorFactory.allEditors) {
             editor.document.addDocumentListener(documentListener)
@@ -97,8 +100,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         file: VirtualFile,
         editorsWithProviders: MutableList<FileEditorWithProvider>
     ) {
-        // val document = source.selectedTextEditor?.document
-        //val editorFactory = EditorFactory.getInstance().getEditors(document!!)
+        // create 되거나 open 되는 모든 에디터에 DocumentListener 등록 & 중복 등록 방지
         if (!documentListeners.contains(documentListener)) {
             documentListeners.add(documentListener)
             source.selectedTextEditor?.document?.addDocumentListener(documentListener)
