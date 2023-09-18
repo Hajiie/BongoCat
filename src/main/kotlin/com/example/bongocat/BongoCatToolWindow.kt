@@ -13,23 +13,29 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
+import com.intellij.util.ui.ImageUtil
+import com.intellij.util.ui.UIUtil
 import java.awt.Image
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
+import java.awt.image.BufferedImage
+import java.awt.image.BufferedImage.TYPE_INT_ARGB
 import java.util.*
 import javax.imageio.ImageIO
-import javax.swing.ImageIcon
-import javax.swing.JLabel
-import javax.swing.JPanel
+import javax.swing.*
 import javax.swing.Timer
 
 class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, ComponentAdapter() {
     // 이미지 아이콘
-    private val bongoLeft = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_left.png")))
-    private val bongoRight = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_right.png")))
-    private val bongoMiddle =
+    private var bongoLeft = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_left.png")))
+    private var bongoRight = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_right.png")))
+    private var bongoMiddle =
             ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_middle.png")))
 
+
+    private var scaledBongoLeft = bongoLeft
+    private var scaledBongoRight = bongoRight
+    private var scaledBongoMiddle = bongoMiddle
     // 키 입력 시간을 저장하는 큐
     private val keyPressTimes: LinkedList<Long> = LinkedList()
 
@@ -40,12 +46,14 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
     // DocumentListener를 저장하는 맵
     private val documentListenersMap: MutableMap<Document, DocumentListener> = mutableMapOf()
 
+    private var resizeTimer : Timer? = null
+
     // 생성
     init {
-        label.icon = bongoMiddle
+        label.icon = scaledBongoMiddle
 
         idleTimer = Timer(500) {
-            label.icon = bongoMiddle
+            label.icon = scaledBongoMiddle
         }
 
         idleTimer.isRepeats = false
@@ -53,65 +61,47 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
 
 
 
-
-    init {
-        idleTimer.isRepeats = false
-    }
-
     //Debounce 적용하기
+
     //이미지 아이콘 크기 조절 메서드
     private fun resizeImageIcon(toolWindow: ToolWindow){
         val toolWindowWidth = toolWindow.component.width
         val toolWindowHeight = toolWindow.component.height
 
 
-        if(toolWindowWidth>0&&toolWindowHeight>20){
+        if(toolWindowWidth>0&&toolWindowHeight>0){
             val originalWidth = bongoLeft.image.getWidth(null)
             val originalHeight = bongoLeft.image.getHeight(null)
-
-
 
             // 원본 이미지 비율 계산
             val widthRatio = toolWindowWidth.toDouble() / originalWidth
             val heightRatio = toolWindowHeight.toDouble() / originalHeight
 
-            println("original width : $originalWidth")
-            println("original height : $originalHeight")
-            println("label width : $toolWindowWidth")
-            println("label height : $toolWindowHeight")
-            println("widthRatio : $widthRatio")
-            println("heightRatio : $heightRatio")
+            // 더 작은 비율로 이미지 크기 조절
+            val minRatio = minOf(widthRatio, heightRatio)
+
+
+            val scaledWidth= (originalWidth * minRatio).toInt()
+            val scaledHeight = (originalHeight * minRatio).toInt()
+
 
             // 비율 유지하며 크기 조절
-            val scaledBongoLeft = bongoLeft.image.getScaledInstance(
-                (originalWidth * widthRatio).toInt()-50,
-                (originalHeight * heightRatio).toInt()-20,
-                Image.SCALE_SMOOTH
-            )
+            scaledBongoLeft = createScaledImage(bongoLeft, scaledWidth, scaledHeight)
 
             // 나머지 이미지도 같은 비율로 크기 조절
-            val scaledBongoRight = bongoRight.image.getScaledInstance(
-                (originalWidth * widthRatio).toInt()-50,
-                (originalHeight * heightRatio).toInt()-20,
-                Image.SCALE_SMOOTH
-            )
-            val scaledBongoMiddle = bongoMiddle.image.getScaledInstance(
-                (originalWidth * widthRatio).toInt()-50,
-                (originalHeight * heightRatio).toInt()-20,
-                Image.SCALE_SMOOTH
-            )
-            println("scaledbongoleft width : ${scaledBongoLeft.getWidth(null)}")
-            println("scaledbongoleft height : ${scaledBongoLeft.getHeight(null)}")
+            scaledBongoRight = createScaledImage(bongoRight, scaledWidth, scaledHeight)
+            scaledBongoMiddle = createScaledImage(bongoMiddle, scaledWidth, scaledHeight)
 
-            println("bongoleft width : ${bongoLeft.image.getWidth(null)}")
-            println("bongoleft height : ${bongoLeft.image.getHeight(null)}")
 
-            bongoLeft.image = scaledBongoLeft
-            bongoRight.image = scaledBongoRight
-            bongoMiddle.image = scaledBongoMiddle
-
+            label.revalidate()
             label.repaint()
         }
+    }
+
+    private fun createScaledImage(icon: Icon, width:Int, height:Int):ImageIcon{
+        val image = (icon as ImageIcon).image
+        val scaledImage = ImageUtil.createImage(width, height, BufferedImage.TYPE_INT_ARGB)
+        return ImageIcon(scaledImage)
     }
 
     //registerDocumentListener 메서드
@@ -133,7 +123,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
                     keyPressTimes.removeIf { it < currentTime - 100 }
 
                     if (keyPressTimes.size >= 1) {
-                        label.icon = if (label.icon === bongoLeft) bongoRight else bongoLeft
+                        label.icon = if (label.icon === scaledBongoLeft) scaledBongoRight else scaledBongoLeft
                     }
                 }
             }
@@ -154,9 +144,17 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
         val content = contentFactory.createContent(panel, "", false)
         toolWindow.contentManager.addContent(content)
 
+
+
         toolWindow.component.addComponentListener(object: ComponentAdapter(){
             override fun componentResized(e: ComponentEvent?) {
-                resizeImageIcon(toolWindow)
+                resizeTimer?.stop()
+
+                resizeTimer = Timer(500) {
+                    resizeImageIcon(toolWindow)
+                }
+                resizeTimer?.isRepeats = false
+                resizeTimer?.start()
             }
         })
         // 포커스 설정
@@ -171,8 +169,6 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
         for (file in fileEditorManager.openFiles) {
             registerDocumentListener(file)
         }
-
-
 
         fileEditorManager.addFileEditorManagerListener(this)
     }
