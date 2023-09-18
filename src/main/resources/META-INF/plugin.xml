@@ -25,7 +25,7 @@
 
 
 
-        <toolWindow id="BongoCatToolWindow"
+        <toolWindow id="BongoCat"
                     anchor="bottom"
                     factoryClass="com.example.bongocat.BongoCatToolWindow"/>
     </extensions>

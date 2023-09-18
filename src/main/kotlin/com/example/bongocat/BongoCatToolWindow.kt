@@ -13,6 +13,9 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
+import java.awt.Image
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 import java.util.*
 import javax.imageio.ImageIO
 import javax.swing.ImageIcon
@@ -20,7 +23,7 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.Timer
 
-class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
+class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, ComponentAdapter() {
     // 이미지 아이콘
     private val bongoLeft = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_left.png")))
     private val bongoRight = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_right.png")))
@@ -46,8 +49,69 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         }
 
         idleTimer.isRepeats = false
+    }
 
 
+
+
+    init {
+        idleTimer.isRepeats = false
+    }
+
+    //Debounce 적용하기
+    //이미지 아이콘 크기 조절 메서드
+    private fun resizeImageIcon(toolWindow: ToolWindow){
+        val toolWindowWidth = toolWindow.component.width
+        val toolWindowHeight = toolWindow.component.height
+
+
+        if(toolWindowWidth>0&&toolWindowHeight>20){
+            val originalWidth = bongoLeft.image.getWidth(null)
+            val originalHeight = bongoLeft.image.getHeight(null)
+
+
+
+            // 원본 이미지 비율 계산
+            val widthRatio = toolWindowWidth.toDouble() / originalWidth
+            val heightRatio = toolWindowHeight.toDouble() / originalHeight
+
+            println("original width : $originalWidth")
+            println("original height : $originalHeight")
+            println("label width : $toolWindowWidth")
+            println("label height : $toolWindowHeight")
+            println("widthRatio : $widthRatio")
+            println("heightRatio : $heightRatio")
+
+            // 비율 유지하며 크기 조절
+            val scaledBongoLeft = bongoLeft.image.getScaledInstance(
+                (originalWidth * widthRatio).toInt()-50,
+                (originalHeight * heightRatio).toInt()-20,
+                Image.SCALE_SMOOTH
+            )
+
+            // 나머지 이미지도 같은 비율로 크기 조절
+            val scaledBongoRight = bongoRight.image.getScaledInstance(
+                (originalWidth * widthRatio).toInt()-50,
+                (originalHeight * heightRatio).toInt()-20,
+                Image.SCALE_SMOOTH
+            )
+            val scaledBongoMiddle = bongoMiddle.image.getScaledInstance(
+                (originalWidth * widthRatio).toInt()-50,
+                (originalHeight * heightRatio).toInt()-20,
+                Image.SCALE_SMOOTH
+            )
+            println("scaledbongoleft width : ${scaledBongoLeft.getWidth(null)}")
+            println("scaledbongoleft height : ${scaledBongoLeft.getHeight(null)}")
+
+            println("bongoleft width : ${bongoLeft.image.getWidth(null)}")
+            println("bongoleft height : ${bongoLeft.image.getHeight(null)}")
+
+            bongoLeft.image = scaledBongoLeft
+            bongoRight.image = scaledBongoRight
+            bongoMiddle.image = scaledBongoMiddle
+
+            label.repaint()
+        }
     }
 
     //registerDocumentListener 메서드
@@ -90,6 +154,11 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         val content = contentFactory.createContent(panel, "", false)
         toolWindow.contentManager.addContent(content)
 
+        toolWindow.component.addComponentListener(object: ComponentAdapter(){
+            override fun componentResized(e: ComponentEvent?) {
+                resizeImageIcon(toolWindow)
+            }
+        })
         // 포커스 설정
         panel.isFocusable = true
         panel.requestFocusInWindow()
@@ -102,6 +171,8 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener {
         for (file in fileEditorManager.openFiles) {
             registerDocumentListener(file)
         }
+
+
 
         fileEditorManager.addFileEditorManagerListener(this)
     }
