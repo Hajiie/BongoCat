@@ -92,7 +92,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
             scaledBongoRight = createScaledImage(bongoRight, scaledWidth, scaledHeight)
             scaledBongoMiddle = createScaledImage(bongoMiddle, scaledWidth, scaledHeight)
 
-
+            label.icon = scaledBongoMiddle
             label.revalidate()
             label.repaint()
         }
@@ -100,7 +100,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
 
     private fun createScaledImage(icon: Icon, width:Int, height:Int):ImageIcon{
         val image = (icon as ImageIcon).image
-        val scaledImage = ImageUtil.createImage(width, height, BufferedImage.TYPE_INT_ARGB)
+        val scaledImage = image.getScaledInstance(width, height, Image.SCALE_SMOOTH)
         return ImageIcon(scaledImage)
     }
 
