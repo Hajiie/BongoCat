@@ -1,5 +1,6 @@
 package com.example.bongocat
 
+
 import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.event.DocumentEvent
@@ -123,7 +124,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
                     keyPressTimes.removeIf { it < currentTime - 100 }
 
                     if (keyPressTimes.size >= 1) {
-                        label.icon = if (label.icon === scaledBongoLeft) scaledBongoRight else scaledBongoLeft
+                        label.icon = if (label.icon == scaledBongoRight) scaledBongoLeft else scaledBongoRight
                     }
                 }
             }
