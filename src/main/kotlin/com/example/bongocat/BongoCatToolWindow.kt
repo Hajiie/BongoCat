@@ -14,17 +14,13 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
-import com.intellij.util.ui.ImageUtil
-import com.intellij.util.ui.UIUtil
 import java.awt.Image
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
-import java.awt.image.BufferedImage
-import java.awt.image.BufferedImage.TYPE_INT_ARGB
-import java.util.*
 import javax.imageio.ImageIO
 import javax.swing.*
 import javax.swing.Timer
+import java.util.LinkedList
 
 class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, ComponentAdapter() {
     // 이미지 아이콘
@@ -33,12 +29,36 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
     private var bongoMiddle =
             ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_middle.png")))
 
+    fun getBongoLeft(): ImageIcon {
+        return bongoLeft
+    }
 
-    private var scaledBongoLeft = bongoLeft
-    private var scaledBongoRight = bongoRight
-    private var scaledBongoMiddle = bongoMiddle
+    fun getBongoRight(): ImageIcon {
+        return bongoRight
+    }
+
+    fun getBongoMiddle(): ImageIcon {
+        return bongoMiddle
+    }
+
+    private var scaledBongoLeft = getBongoLeft()
+    private var scaledBongoRight = getBongoRight()
+    private var scaledBongoMiddle = getBongoMiddle()
+
+    fun getScaledBongoLeft(): ImageIcon {
+        return scaledBongoLeft
+    }
+
+    fun getScaledBongoRight(): ImageIcon {
+        return scaledBongoRight
+    }
+
+    fun getScaledBongoMiddle(): ImageIcon {
+        return scaledBongoMiddle
+    }
+
     // 키 입력 시간을 저장하는 큐
-    private val keyPressTimes: LinkedList<Long> = LinkedList()
+    private val keyPressTimes: LinkedList<Long> = LinkedList<Long>()
 
     // 500ms 이내의 키 입력을 감지하기 위한 타이머
     private val idleTimer: Timer
@@ -71,8 +91,8 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
 
 
         if(toolWindowWidth>0&&toolWindowHeight>0){
-            val originalWidth = bongoLeft.image.getWidth(null)
-            val originalHeight = bongoLeft.image.getHeight(null)
+            val originalWidth = getBongoLeft().image.getWidth(null)
+            val originalHeight = getBongoLeft().image.getHeight(null)
 
             // 원본 이미지 비율 계산
             val widthRatio = toolWindowWidth.toDouble() / originalWidth
@@ -87,13 +107,13 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
 
 
             // 비율 유지하며 크기 조절
-            scaledBongoLeft = createScaledImage(bongoLeft, scaledWidth, scaledHeight)
+            scaledBongoLeft = createScaledImage(getBongoLeft(), scaledWidth, scaledHeight)
 
             // 나머지 이미지도 같은 비율로 크기 조절
-            scaledBongoRight = createScaledImage(bongoRight, scaledWidth, scaledHeight)
-            scaledBongoMiddle = createScaledImage(bongoMiddle, scaledWidth, scaledHeight)
+            scaledBongoRight = createScaledImage(getBongoRight(), scaledWidth, scaledHeight)
+            scaledBongoMiddle = createScaledImage(getBongoMiddle(), scaledWidth, scaledHeight)
 
-            label.icon = scaledBongoMiddle
+            label.icon = getScaledBongoMiddle()
             label.revalidate()
             label.repaint()
         }
@@ -124,7 +144,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
                     keyPressTimes.removeIf { it < currentTime - 100 }
 
                     if (keyPressTimes.size >= 1) {
-                        label.icon = if (label.icon == scaledBongoRight) scaledBongoLeft else scaledBongoRight
+                        label.icon = if (label.icon == getScaledBongoRight()) getScaledBongoLeft() else getScaledBongoRight()
                     }
                 }
             }
