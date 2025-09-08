@@ -1,14 +1,12 @@
 package com.example.bongocat
 
 
-import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
-import com.intellij.openapi.fileEditor.ex.FileEditorWithProvider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
@@ -143,7 +141,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
                     keyPressTimes.addLast(currentTime)
                     keyPressTimes.removeIf { it < currentTime - 100 }
 
-                    if (keyPressTimes.size >= 1) {
+                    if (keyPressTimes.isNotEmpty()) { //keyPressTimes.size >= 1
                         label.icon = if (label.icon == getScaledBongoRight()) getScaledBongoLeft() else getScaledBongoRight()
                     }
                 }
@@ -161,7 +159,7 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
 
         panel.add(label)
 
-        val contentFactory = ServiceManager.getService(ContentFactory::class.java)
+        val contentFactory = ContentFactory.getInstance()
         val content = contentFactory.createContent(panel, "", false)
         toolWindow.contentManager.addContent(content)
 
@@ -190,20 +188,14 @@ class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, Componen
         for (file in fileEditorManager.openFiles) {
             registerDocumentListener(file)
         }
-
-        fileEditorManager.addFileEditorManagerListener(this)
     }
 
-
-
     // FileEditorManagerListener의 메서드를 구현
-    override fun fileOpenedSync(
-            source: FileEditorManager,
-            file: VirtualFile,
-            editorsWithProviders: MutableList<FileEditorWithProvider>
+    override fun fileOpened(
+        source: FileEditorManager,
+        file: VirtualFile
     ) {
         // 중복 등록을 방지하고 DocumentListener를 등록
         registerDocumentListener(file)
-
     }
 }
