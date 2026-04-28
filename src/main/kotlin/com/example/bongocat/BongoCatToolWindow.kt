@@ -1,6 +1,6 @@
 package com.example.bongocat
 
-
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
@@ -8,194 +8,191 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
+import java.awt.BorderLayout
 import java.awt.Image
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.imageio.ImageIO
-import javax.swing.*
+import javax.swing.Icon
+import javax.swing.ImageIcon
+import javax.swing.JLabel
+import javax.swing.JPanel
+import javax.swing.SwingUtilities
 import javax.swing.Timer
-import java.util.LinkedList
 
-class BongoCatToolWindow : ToolWindowFactory,FileEditorManagerListener, ComponentAdapter() {
-    // 이미지 아이콘
-    private var bongoLeft = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_left.png")))
-    private var bongoRight = ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_right.png")))
-    private var bongoMiddle =
-            ImageIcon(ImageIO.read(javaClass.classLoader.getResource("BongoCat_img/bongo_middle.png")))
+class BongoCatToolWindow : ToolWindowFactory {
+    // ToolWindowFactory는 상태를 가지지 않고, 실제 UI 상태는 content 객체가 관리한다.
+    override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
+        BongoCatToolWindowContent(project, toolWindow).create()
+    }
+}
 
-    fun getBongoLeft(): ImageIcon {
-        return bongoLeft
+// Bongo Cat Tool Window의 UI, 이미지, 리스너, 타이머 상태를 관리하는 클래스
+private class BongoCatToolWindowContent(
+    private val project: Project,
+    private val toolWindow: ToolWindow,
+) {
+    // 원본 이미지 아이콘
+    private val originalIcons = BongoCatIcons(
+        left = loadIcon("BongoCat_img/bongo_left.png"),
+        middle = loadIcon("BongoCat_img/bongo_middle.png"),
+        right = loadIcon("BongoCat_img/bongo_right.png"),
+    )
+    // Tool Window 크기에 맞춰 조절된 이미지 아이콘
+    private var scaledIcons = originalIcons
+
+    // Bongo Cat 이미지를 보여주는 라벨
+    private val label = JLabel(scaledIcons.middle)
+
+    // 입력이 멈추면 가운데 이미지로 되돌리는 타이머
+    private val idleTimer = Timer(IDLE_DELAY_MS) {
+        label.icon = scaledIcons.middle
+    }.apply {
+        isRepeats = false
     }
 
-    fun getBongoRight(): ImageIcon {
-        return bongoRight
-    }
+    private var resizeTimer: Timer? = null
 
-    fun getBongoMiddle(): ImageIcon {
-        return bongoMiddle
-    }
+    // Tool Window에 들어갈 콘텐츠와 필요한 리스너를 생성한다.
+    fun create() {
+        val disposable = Disposer.newDisposable("BongoCat tool window")
+        val registeredDocuments = mutableSetOf<Document>()
 
-    private var scaledBongoLeft = getBongoLeft()
-    private var scaledBongoRight = getBongoRight()
-    private var scaledBongoMiddle = getBongoMiddle()
-
-    fun getScaledBongoLeft(): ImageIcon {
-        return scaledBongoLeft
-    }
-
-    fun getScaledBongoRight(): ImageIcon {
-        return scaledBongoRight
-    }
-
-    fun getScaledBongoMiddle(): ImageIcon {
-        return scaledBongoMiddle
-    }
-
-    // 키 입력 시간을 저장하는 큐
-    private val keyPressTimes: LinkedList<Long> = LinkedList<Long>()
-
-    // 500ms 이내의 키 입력을 감지하기 위한 타이머
-    private val idleTimer: Timer
-    private val label: JLabel = JLabel()
-
-    // DocumentListener를 저장하는 맵
-    private val documentListenersMap: MutableMap<Document, DocumentListener> = mutableMapOf()
-
-    private var resizeTimer : Timer? = null
-
-    // 생성
-    init {
-        label.icon = scaledBongoMiddle
-
-        idleTimer = Timer(500) {
-            label.icon = scaledBongoMiddle
+        val panel = JPanel(BorderLayout()).apply {
+            add(label, BorderLayout.CENTER)
+            isFocusable = true
         }
 
-        idleTimer.isRepeats = false
-    }
+        val content = ContentFactory.getInstance().createContent(panel, "", false).apply {
+            setDisposer(disposable)
+        }
+        toolWindow.contentManager.addContent(content)
 
+        // 리사이즈 이벤트는 짧게 debounce해서 이미지 스케일링 비용을 줄인다.
+        val resizeListener = object : ComponentAdapter() {
+            override fun componentResized(e: ComponentEvent?) {
+                scheduleResize()
+            }
+        }
+        toolWindow.component.addComponentListener(resizeListener)
 
+        // 새로 열린 파일에도 DocumentListener를 등록한다.
+        val editorListener = object : FileEditorManagerListener {
+            override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                registerDocumentListener(file, disposable, registeredDocuments)
+            }
+        }
+        project.messageBus.connect(disposable)
+            .subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, editorListener)
 
-    //Debounce 적용하기
+        // Tool Window 콘텐츠가 제거될 때 타이머와 Swing 리스너를 정리한다.
+        Disposer.register(disposable) {
+            idleTimer.stop()
+            resizeTimer?.stop()
+            toolWindow.component.removeComponentListener(resizeListener)
+        }
 
-    //이미지 아이콘 크기 조절 메서드
-    private fun resizeImageIcon(toolWindow: ToolWindow){
-        val toolWindowWidth = toolWindow.component.width
-        val toolWindowHeight = toolWindow.component.height
+        // 이미 열려 있는 파일에 대한 DocumentListener도 등록한다.
+        FileEditorManager.getInstance(project).openFiles.forEach { file ->
+            registerDocumentListener(file, disposable, registeredDocuments)
+        }
 
-
-        if(toolWindowWidth>0&&toolWindowHeight>0){
-            val originalWidth = getBongoLeft().image.getWidth(null)
-            val originalHeight = getBongoLeft().image.getHeight(null)
-
-            // 원본 이미지 비율 계산
-            val widthRatio = toolWindowWidth.toDouble() / originalWidth
-            val heightRatio = toolWindowHeight.toDouble() / originalHeight
-
-            // 더 작은 비율로 이미지 크기 조절
-            val minRatio = minOf(widthRatio, heightRatio)
-
-
-            val scaledWidth= (originalWidth * minRatio).toInt()
-            val scaledHeight = (originalHeight * minRatio).toInt()
-
-
-            // 비율 유지하며 크기 조절
-            scaledBongoLeft = createScaledImage(getBongoLeft(), scaledWidth, scaledHeight)
-
-            // 나머지 이미지도 같은 비율로 크기 조절
-            scaledBongoRight = createScaledImage(getBongoRight(), scaledWidth, scaledHeight)
-            scaledBongoMiddle = createScaledImage(getBongoMiddle(), scaledWidth, scaledHeight)
-
-            label.icon = getScaledBongoMiddle()
-            label.revalidate()
-            label.repaint()
+        panel.requestFocusInWindow()
+        SwingUtilities.invokeLater {
+            resizeImageIcon()
         }
     }
 
-    private fun createScaledImage(icon: Icon, width:Int, height:Int):ImageIcon{
+    // 이미지 리사이즈 요청을 debounce한다.
+    private fun scheduleResize() {
+        resizeTimer?.stop()
+        resizeTimer = Timer(RESIZE_DELAY_MS) {
+            resizeImageIcon()
+        }.apply {
+            isRepeats = false
+            start()
+        }
+    }
+
+    // 원본 비율을 유지하며 Tool Window 크기에 맞게 이미지를 조절한다.
+    private fun resizeImageIcon() {
+        val component = toolWindow.component
+        if (component.width <= 0 || component.height <= 0) {
+            return
+        }
+
+        val originalWidth = originalIcons.left.iconWidth
+        val originalHeight = originalIcons.left.iconHeight
+        val scale = minOf(
+            component.width.toDouble() / originalWidth,
+            component.height.toDouble() / originalHeight,
+        )
+
+        val scaledWidth = (originalWidth * scale).toInt().coerceAtLeast(1)
+        val scaledHeight = (originalHeight * scale).toInt().coerceAtLeast(1)
+
+        scaledIcons = BongoCatIcons(
+            left = createScaledImage(originalIcons.left, scaledWidth, scaledHeight),
+            middle = createScaledImage(originalIcons.middle, scaledWidth, scaledHeight),
+            right = createScaledImage(originalIcons.right, scaledWidth, scaledHeight),
+        )
+
+        label.icon = scaledIcons.middle
+        label.revalidate()
+        label.repaint()
+    }
+
+    // 파일의 Document 변경 이벤트를 감지해 좌/우 이미지를 번갈아 보여준다.
+    private fun registerDocumentListener(
+        file: VirtualFile,
+        disposable: Disposable,
+        registeredDocuments: MutableSet<Document>,
+    ) {
+        val document = FileDocumentManager.getInstance().getDocument(file) ?: return
+        if (!registeredDocuments.add(document)) {
+            return
+        }
+
+        document.addDocumentListener(object : DocumentListener {
+            override fun documentChanged(event: DocumentEvent) {
+                idleTimer.restart()
+                label.icon = if (label.icon == scaledIcons.right) {
+                    scaledIcons.left
+                } else {
+                    scaledIcons.right
+                }
+            }
+        }, disposable)
+    }
+
+    // 리소스에서 이미지 파일을 읽어 ImageIcon으로 변환한다.
+    private fun loadIcon(path: String): ImageIcon {
+        val resource = javaClass.classLoader.getResource(path)
+            ?: error("BongoCat image resource is missing: $path")
+
+        return ImageIcon(ImageIO.read(resource))
+    }
+
+    // ImageIcon의 실제 이미지를 지정한 크기로 스케일링한다.
+    private fun createScaledImage(icon: Icon, width: Int, height: Int): ImageIcon {
         val image = (icon as ImageIcon).image
         val scaledImage = image.getScaledInstance(width, height, Image.SCALE_SMOOTH)
         return ImageIcon(scaledImage)
     }
 
-    //registerDocumentListener 메서드
-    private fun registerDocumentListener(file: VirtualFile) {
-        val document = FileDocumentManager.getInstance().getDocument(file)
-        if (document != null) {
-            // 이미 등록된 DocumentListener인 경우 제거
-            documentListenersMap[document]?.let {
-                document.removeDocumentListener(it)
-                documentListenersMap.remove(document)
-            }
+    private data class BongoCatIcons(
+        val left: ImageIcon,
+        val middle: ImageIcon,
+        val right: ImageIcon,
+    )
 
-            // DocumentListener를 구현
-            val documentListener = object : DocumentListener {
-                override fun documentChanged(event: DocumentEvent) {
-                    idleTimer.restart()
-                    val currentTime = System.currentTimeMillis()
-                    keyPressTimes.addLast(currentTime)
-                    keyPressTimes.removeIf { it < currentTime - 100 }
-
-                    if (keyPressTimes.isNotEmpty()) { //keyPressTimes.size >= 1
-                        label.icon = if (label.icon == getScaledBongoRight()) getScaledBongoLeft() else getScaledBongoRight()
-                    }
-                }
-            }
-
-            // 새로운 DocumentListener 등록
-            document.addDocumentListener(documentListener)
-            documentListenersMap[document] = documentListener
-        }
-    }
-
-    // ToolWindowFactory의 메서드를 구현
-    override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val panel = JPanel()
-
-        panel.add(label)
-
-        val contentFactory = ContentFactory.getInstance()
-        val content = contentFactory.createContent(panel, "", false)
-        toolWindow.contentManager.addContent(content)
-
-
-
-        toolWindow.component.addComponentListener(object: ComponentAdapter(){
-            override fun componentResized(e: ComponentEvent?) {
-                resizeTimer?.stop()
-
-                resizeTimer = Timer(500) {
-                    resizeImageIcon(toolWindow)
-                }
-                resizeTimer?.isRepeats = false
-                resizeTimer?.start()
-            }
-        })
-        // 포커스 설정
-        panel.isFocusable = true
-        panel.requestFocusInWindow()
-
-        // FileEditorManagerListener 등록
-        project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, this)
-
-        // 현재 열려 있는 파일 에디터 목록에 대한 이벤트 리스너 등록
-        val fileEditorManager = FileEditorManager.getInstance(project)
-        for (file in fileEditorManager.openFiles) {
-            registerDocumentListener(file)
-        }
-    }
-
-    // FileEditorManagerListener의 메서드를 구현
-    override fun fileOpened(
-        source: FileEditorManager,
-        file: VirtualFile
-    ) {
-        // 중복 등록을 방지하고 DocumentListener를 등록
-        registerDocumentListener(file)
+    private companion object {
+        private const val IDLE_DELAY_MS = 500
+        private const val RESIZE_DELAY_MS = 500
     }
 }
