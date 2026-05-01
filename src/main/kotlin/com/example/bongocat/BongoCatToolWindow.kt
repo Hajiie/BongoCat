@@ -14,12 +14,14 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import java.awt.Image
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.imageio.ImageIO
 import javax.swing.Icon
 import javax.swing.ImageIcon
+import javax.swing.JComboBox
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
@@ -46,6 +48,12 @@ private class BongoCatToolWindowContent(
     // Tool Window 크기에 맞춰 조절된 이미지 아이콘
     private var scaledIcons = originalIcons
 
+    // 좌/우 이미지에 맞춰 재생할 Bongo Cat 효과음
+    private val soundPlayer = BongoCatSoundPlayer()
+
+    // IDE 재시작 후에도 유지되는 사용자 설정
+    private val settings = BongoCatSettings.getInstance()
+
     // Bongo Cat 이미지를 보여주는 라벨
     private val label = JLabel(scaledIcons.middle)
 
@@ -55,8 +63,15 @@ private class BongoCatToolWindowContent(
     }.apply {
         isRepeats = false
     }
+    private val soundTimer = Timer(SOUND_DELAY_MS) {
+        playPendingSound()
+    }.apply {
+        isRepeats = false
+    }
 
     private var resizeTimer: Timer? = null
+    private var pendingKeyboardSoundType: KeyboardSoundType? = null
+    private var pendingBongoHit: Boolean = false
 
     // Tool Window에 들어갈 콘텐츠와 필요한 리스너를 생성한다.
     fun create() {
@@ -64,6 +79,7 @@ private class BongoCatToolWindowContent(
         val registeredDocuments = mutableSetOf<Document>()
 
         val panel = JPanel(BorderLayout()).apply {
+            add(createSoundToolbar(), BorderLayout.NORTH)
             add(label, BorderLayout.CENTER)
             isFocusable = true
         }
@@ -93,7 +109,9 @@ private class BongoCatToolWindowContent(
         // Tool Window 콘텐츠가 제거될 때 타이머와 Swing 리스너를 정리한다.
         Disposer.register(disposable) {
             idleTimer.stop()
+            soundTimer.stop()
             resizeTimer?.stop()
+            soundPlayer.dispose()
             toolWindow.component.removeComponentListener(resizeListener)
         }
 
@@ -106,6 +124,7 @@ private class BongoCatToolWindowContent(
         SwingUtilities.invokeLater {
             resizeImageIcon()
         }
+        updateSoundKeepAlive()
     }
 
     // 이미지 리사이즈 요청을 debounce한다.
@@ -161,13 +180,106 @@ private class BongoCatToolWindowContent(
         document.addDocumentListener(object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
                 idleTimer.restart()
-                label.icon = if (label.icon == scaledIcons.right) {
-                    scaledIcons.left
-                } else {
-                    scaledIcons.right
+
+                when (settings.soundMode) {
+                    SoundMode.BONGO -> scheduleBongoHit()
+                    SoundMode.KEYBOARD -> {
+                        label.icon = nextBongoIcon()
+                        scheduleKeyboardSound(event.keyboardSoundType())
+                    }
+                    SoundMode.OFF -> {
+                        label.icon = nextBongoIcon()
+                    }
                 }
             }
         }, disposable)
+    }
+
+    // 효과음 선택 메뉴를 Tool Window 상단에 배치한다.
+    private fun createSoundToolbar(): JPanel =
+        JPanel(FlowLayout(FlowLayout.RIGHT, 8, 4)).apply {
+            isOpaque = false
+            add(createSoundModeSelector())
+        }
+
+    // 사용할 효과음 종류를 선택하는 콤보박스를 생성한다.
+    private fun createSoundModeSelector(): JComboBox<SoundMode> =
+        JComboBox(SoundMode.entries.toTypedArray()).apply {
+            selectedItem = settings.soundMode
+            addActionListener {
+                settings.soundMode = selectedItem as SoundMode
+                updateSoundKeepAlive()
+            }
+        }
+
+    // 사운드 설정에 따라 첫 재생 지연을 줄이는 keep-alive 상태를 맞춘다.
+    private fun updateSoundKeepAlive() {
+        if (settings.soundMode != SoundMode.OFF) {
+            soundPlayer.startKeepAlive()
+        } else {
+            soundPlayer.stopKeepAlive()
+        }
+    }
+
+    // 한글 IME처럼 짧은 시간에 몰린 DocumentEvent를 봉고 타격 하나로 합친다.
+    private fun scheduleBongoHit() {
+        pendingBongoHit = true
+        pendingKeyboardSoundType = null
+        soundTimer.restart()
+    }
+
+    // IME 조합처럼 짧은 시간에 몰린 DocumentEvent는 마지막 소리 하나로 합친다.
+    private fun scheduleKeyboardSound(keyboardSoundType: KeyboardSoundType) {
+        pendingBongoHit = false
+        pendingKeyboardSoundType = keyboardSoundType
+        soundTimer.restart()
+    }
+
+    // 대기 중인 효과음을 실제로 재생한다.
+    private fun playPendingSound() {
+        val shouldPlayBongo = pendingBongoHit
+        val keyboardSoundType = pendingKeyboardSoundType
+
+        pendingBongoHit = false
+        pendingKeyboardSoundType = null
+
+        if (shouldPlayBongo && settings.soundMode == SoundMode.BONGO) {
+            val nextIcon = nextBongoIcon()
+            label.icon = nextIcon
+            playBongoSoundFor(nextIcon)
+        } else if (keyboardSoundType != null && settings.soundMode == SoundMode.KEYBOARD) {
+            soundPlayer.playKeyboard(keyboardSoundType)
+        }
+    }
+
+    // 현재 이미지 방향에 맞춰 봉고 효과음을 즉시 재생한다.
+    private fun playBongoSoundFor(icon: ImageIcon) {
+        if (icon == scaledIcons.left) {
+            soundPlayer.playLeft()
+        } else if (icon == scaledIcons.right) {
+            soundPlayer.playRight()
+        }
+    }
+
+    // 현재 이미지의 반대 방향 봉고 이미지를 반환한다.
+    private fun nextBongoIcon(): ImageIcon =
+        if (label.icon == scaledIcons.right) {
+            scaledIcons.left
+        } else {
+            scaledIcons.right
+        }
+
+    // Document 변경 내용을 기준으로 알맞은 키보드 효과음을 고른다.
+    private fun DocumentEvent.keyboardSoundType(): KeyboardSoundType {
+        val newText = newFragment.toString()
+        val oldText = oldFragment.toString()
+
+        return when {
+            newText.contains('\n') -> KeyboardSoundType.ENTER
+            newText.contains(' ') -> KeyboardSoundType.SPACE
+            newText.isEmpty() && oldText.isNotEmpty() -> KeyboardSoundType.BACKSPACE
+            else -> KeyboardSoundType.CHARACTER
+        }
     }
 
     // 리소스에서 이미지 파일을 읽어 ImageIcon으로 변환한다.
@@ -194,5 +306,6 @@ private class BongoCatToolWindowContent(
     private companion object {
         private const val IDLE_DELAY_MS = 500
         private const val RESIZE_DELAY_MS = 500
+        private const val SOUND_DELAY_MS = 20
     }
 }

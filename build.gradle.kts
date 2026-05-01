@@ -30,6 +30,11 @@ tasks {
         kotlinOptions.jvmTarget = "17"
     }
 
+    processResources {
+        exclude("BongoCat_sound/BongoSound/Bongo 1 by coldwellw.wav")
+        exclude("BongoCat_sound/KeyboardSound/Keyboard Sounds Pack by Haratman.wav")
+    }
+
     patchPluginXml {
         untilBuild.set(provider { null })
     }
