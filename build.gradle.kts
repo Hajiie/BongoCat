@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.example"
-version = "1.5-SNAPSHOT"
+version = "1.6-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -37,6 +37,14 @@ tasks {
 
     patchPluginXml {
         untilBuild.set(provider { null })
+        changeNotes.set("""
+          <ul>
+              <li>Added Bongo and Keyboard sound modes.</li>
+              <li>Added persistent sound mode setting.</li>
+              <li>Improved Korean IME input handling to prevent duplicate sounds.</li>
+              <li>Added low-latency WAV playback.</li>
+          </ul>
+      """.trimIndent())
     }
 
     signPlugin {
